@@ -3,7 +3,8 @@ package com.smartstock.backend.controller;
 import com.smartstock.backend.dto.RegisterRequest;
 import com.smartstock.backend.dto.RegisterResponse;
 import com.smartstock.backend.service.AuthService;
-
+import com.smartstock.backend.dto.LoginRequest;
+import com.smartstock.backend.dto.LoginResponse;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
@@ -29,5 +30,14 @@ public class AuthController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request) {
+
+        LoginResponse response = authService.login(request);
+
+        return ResponseEntity.ok(response);
     }
 }
