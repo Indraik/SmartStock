@@ -1,0 +1,26 @@
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Java build files
+target/
+*.class
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+application-local.properties
+
+# Frontend
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+
+# Operating system files
+.DS_Store
+Thumbs.db
