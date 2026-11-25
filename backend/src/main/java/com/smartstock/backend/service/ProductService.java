@@ -20,6 +20,15 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.smartstock.backend.dto.PageResponse;
+import com.smartstock.backend.specification.ProductSpecification;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.math.BigDecimal;
+
 import java.util.List;
 import java.util.Locale;
 
@@ -86,30 +95,116 @@ public class ProductService {
         return mapToResponse(savedProduct);
     }
 
-    // 2. GET ALL PRODUCTS - ADMIN AND STAFF
-
     @Transactional(readOnly = true)
-    public List<ProductResponse> getProducts() {
+    public PageResponse<?> searchProducts(
+            String search,
+            Long categoryId,
+            Long supplierId,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Boolean available,
+            Boolean active,
+            boolean isCustomer,
+            Pageable pageable) {
 
-        return productRepository
-                .findAll(Sort.by("name").ascending())
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+        // Validate category and supplier IDs
+
+        if (categoryId != null && categoryId <= 0) {
+
+            throw new IllegalArgumentException(
+                    "Category ID must be positive");
+        }
+
+        if (supplierId != null && supplierId <= 0) {
+
+            throw new IllegalArgumentException(
+                    "Supplier ID must be positive");
+        }
+
+        // Validate minimum price
+
+        if (minPrice != null
+                && minPrice.compareTo(BigDecimal.ZERO) < 0) {
+
+            throw new IllegalArgumentException(
+                    "Minimum price cannot be negative");
+        }
+
+        // Validate maximum price
+
+        if (maxPrice != null
+                && maxPrice.compareTo(BigDecimal.ZERO) < 0) {
+
+            throw new IllegalArgumentException(
+                    "Maximum price cannot be negative");
+        }
+
+        // Validate price range
+
+        if (minPrice != null
+                && maxPrice != null
+                && minPrice.compareTo(maxPrice) > 0) {
+
+            throw new IllegalArgumentException(
+                    "Minimum price cannot exceed maximum price");
+        }
+
+        // Validate search length
+
+        if (search != null && search.length() > 150) {
+
+            throw new IllegalArgumentException(
+                    "Search cannot exceed 150 characters");
+        }
+
+        // Customer restrictions
+
+        if (isCustomer) {
+
+            if (supplierId != null || active != null) {
+
+                throw new IllegalArgumentException(
+                        "Supplier and active status filters "
+                                + "are unavailable to customers");
+            }
+
+            active = true;
+        }
+
+        // Build specification
+
+        Specification<Product> specification =
+                ProductSpecification.filterProducts(
+                        search,
+                        categoryId,
+                        supplierId,
+                        minPrice,
+                        maxPrice,
+                        available,
+                        active
+                );
+
+        // Execute paginated query
+
+        Page<Product> productPage =
+                productRepository.findAll(
+                        specification,
+                        pageable
+                );
+
+        // Return role-specific response
+
+        if (isCustomer) {
+
+            return PageResponse.from(
+                    productPage.map(this::mapToCatalogResponse)
+            );
+        }
+
+        return PageResponse.from(
+                productPage.map(this::mapToResponse)
+        );
     }
-
-    // 3. GET CUSTOMER CATALOG
-
-    @Transactional(readOnly = true)
-    public List<ProductCatalogResponse> getCatalog() {
-
-        return productRepository
-                .findAllByActiveTrueOrderByNameAsc()
-                .stream()
-                .map(this::mapToCatalogResponse)
-                .toList();
-    }
-
     // 4. GET PRODUCT BY ID - ADMIN AND STAFF
 
     @Transactional(readOnly = true)

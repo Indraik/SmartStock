@@ -15,6 +15,15 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import com.smartstock.backend.dto.PageResponse;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
+import java.math.BigDecimal;
+import java.util.Set;
+
 import java.util.List;
 
 @RestController
@@ -45,17 +54,133 @@ public class ProductController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
-    public ResponseEntity<List<?>> getProducts(
+    public ResponseEntity<PageResponse<?>> getProducts(
+
+            @RequestParam(required = false)
+            String search,
+
+            @RequestParam(required = false)
+            Long categoryId,
+
+            @RequestParam(required = false)
+            Long supplierId,
+
+            @RequestParam(required = false)
+            BigDecimal minPrice,
+
+            @RequestParam(required = false)
+            BigDecimal maxPrice,
+
+            @RequestParam(required = false)
+            Boolean available,
+
+            @RequestParam(required = false)
+            Boolean active,
+
+            @RequestParam(defaultValue = "0")
+            int page,
+
+            @RequestParam(defaultValue = "10")
+            int size,
+
+            @RequestParam(defaultValue = "name,asc")
+            String sort,
+
             Authentication authentication) {
 
-        if (isCustomer(authentication)) {
+        // 1. Validate pagination
 
-            return ResponseEntity.ok(
-                    productService.getCatalog());
+        if (page < 0) {
+
+            throw new IllegalArgumentException(
+                    "Page number cannot be negative");
         }
 
+        if (size < 1 || size > 100) {
+
+            throw new IllegalArgumentException(
+                    "Page size must be between 1 and 100");
+        }
+
+        // 2. Check user role
+
+        boolean customer = isCustomer(authentication);
+
+        // 3. Parse sorting parameter
+
+        String[] sortParts = sort.split(",", -1);
+
+        if (sortParts.length != 2) {
+
+            throw new IllegalArgumentException(
+                    "Sort format must be field,asc or field,desc");
+        }
+
+        String sortField = sortParts[0].trim();
+        String sortDirection = sortParts[1].trim();
+
+        // 4. Validate sorting field
+
+        Set<String> allowedFields = customer
+                ? CUSTOMER_SORT_FIELDS
+                : ALLOWED_SORT_FIELDS;
+
+        if (!allowedFields.contains(sortField)) {
+
+            throw new IllegalArgumentException(
+                    "Invalid sorting field: " + sortField);
+        }
+
+        // 5. Validate sorting direction
+
+        Sort.Direction direction;
+
+        if (sortDirection.equalsIgnoreCase("asc")) {
+
+            direction = Sort.Direction.ASC;
+
+        } else if (sortDirection.equalsIgnoreCase("desc")) {
+
+            direction = Sort.Direction.DESC;
+
+        } else {
+
+            throw new IllegalArgumentException(
+                    "Sort direction must be asc or desc");
+        }
+
+        // 6. Create sorting
+
+        Sort sorting = Sort.by(direction, sortField);
+
+        if (!sortField.equals("id")) {
+
+            sorting = sorting.and(Sort.by("id").ascending());
+        }
+
+        // 7. Create pagination object
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                sorting
+        );
+
+        // 8. Execute search
+
         return ResponseEntity.ok(
-                productService.getProducts());
+                productService.searchProducts(
+                        search,
+                        categoryId,
+                        supplierId,
+                        minPrice,
+                        maxPrice,
+                        available,
+                        active,
+                        customer,
+                        pageable
+                )
+        );
     }
 
     // 3. GET PRODUCT BY ID
@@ -128,4 +253,23 @@ public class ProductController {
                         authority.getAuthority()
                                 .equals("ROLE_CUSTOMER"));
     }
+
+    private static final Set<String> ALLOWED_SORT_FIELDS =
+            Set.of(
+                    "id",
+                    "name",
+                    "price",
+                    "sku",
+                    "stockQuantity",
+                    "createdAt",
+                    "updatedAt"
+            );
+
+    private static final Set<String> CUSTOMER_SORT_FIELDS =
+            Set.of(
+                    "id",
+                    "name",
+                    "price",
+                    "sku"
+            );
 }
