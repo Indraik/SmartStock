@@ -56,6 +56,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/test/**")
                         .authenticated()
 
+                        .requestMatchers(
+                                "/api/categories",
+                                "/api/categories/**"
+                        ).authenticated()
+
                         .anyRequest().denyAll()
                 )
 
