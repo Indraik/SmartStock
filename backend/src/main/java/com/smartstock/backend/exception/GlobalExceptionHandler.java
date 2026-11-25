@@ -110,4 +110,16 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
     }
+    @ExceptionHandler(InvalidOrderStatusException.class)
+    public ResponseEntity<Map<String, Object>>
+    handleInvalidOrderStatus(
+            InvalidOrderStatusException ex,
+            HttpServletRequest request) {
+
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
 }
