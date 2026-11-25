@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface ProductRepository
         extends JpaRepository<Product, Long>,
@@ -16,4 +17,6 @@ public interface ProductRepository
     Optional<Product> findBySku(String sku);
 
     Optional<Product> findByIdAndActiveTrue(Long id);
+
+    List<Product> findAllByActiveTrueOrderByNameAsc();
 }
