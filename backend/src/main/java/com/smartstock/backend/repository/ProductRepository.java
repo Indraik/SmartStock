@@ -10,6 +10,12 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import jakarta.persistence.LockModeType;
+
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 import java.util.Optional;
 
 public interface ProductRepository
@@ -31,4 +37,18 @@ public interface ProductRepository
             Specification<Product> specification,
             Pageable pageable
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Product p WHERE p.id = :id")
+    Optional<Product> findByIdForUpdate(
+            @Param("id") Long id
+    );
+
+    @EntityGraph(attributePaths = {"category", "supplier"})
+    @Query("""
+        SELECT p FROM Product p
+        WHERE p.active = true
+        AND p.stockQuantity <= p.lowStockThreshold
+        """)
+    Page<Product> findLowStockProducts(Pageable pageable);
 }

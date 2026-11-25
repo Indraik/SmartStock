@@ -234,7 +234,7 @@ public class ProductService {
             Long id,
             ProductUpdateRequest request) {
 
-        Product product = findProduct(id);
+        Product product = findProductForUpdate(id);
 
         Category category =
                 findActiveCategory(request.categoryId());
@@ -260,7 +260,7 @@ public class ProductService {
             Long id,
             boolean active) {
 
-        Product product = findProduct(id);
+        Product product = findProductForUpdate(id);
 
         if (active) {
 
@@ -281,7 +281,7 @@ public class ProductService {
     @Transactional
     public void deleteProduct(Long id) {
 
-        Product product = findProduct(id);
+        Product product = findProductForUpdate(id);
 
         product.setActive(false);
     }
@@ -377,4 +377,12 @@ public class ProductService {
                 product.getStockQuantity() > 0
         );
     }
+    private Product findProductForUpdate(Long id) {
+
+        return productRepository.findByIdForUpdate(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Product not found with id: " + id));
+    }
+
 }

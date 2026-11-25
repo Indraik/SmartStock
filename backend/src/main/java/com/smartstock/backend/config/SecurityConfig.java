@@ -71,6 +71,11 @@ public class SecurityConfig {
                                 "/api/products/**"
                         ).authenticated()
 
+                        .requestMatchers(
+                                "/api/inventory",
+                                "/api/inventory/**"
+                        ).hasAnyRole("ADMIN", "STAFF")
+
                         .anyRequest().denyAll()
                 )
 
