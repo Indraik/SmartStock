@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Optional;
 
@@ -35,5 +37,12 @@ public interface OrderRepository
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findByIdForUpdate(
             @Param("id") Long id
+    );
+
+    @Override
+    @EntityGraph(attributePaths = {"customer"})
+    Page<Order> findAll(
+            Specification<Order> specification,
+            Pageable pageable
     );
 }

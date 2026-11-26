@@ -75,7 +75,7 @@ public class SecurityConfig {
                                 "/api/inventory",
                                 "/api/inventory/**"
                         ).hasAnyRole("ADMIN", "STAFF")
-                        
+
                         .requestMatchers(
                                 "/api/orders",
                                 "/api/orders/**"

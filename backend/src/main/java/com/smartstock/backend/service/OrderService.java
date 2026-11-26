@@ -28,6 +28,15 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import com.smartstock.backend.dto.PageResponse;
+import com.smartstock.backend.exception.InvalidOrderStatusException;
+import com.smartstock.backend.specification.OrderSpecification;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.time.LocalDateTime;
+import java.util.Comparator;
 
 @Service
 public class OrderService {
@@ -277,4 +286,266 @@ public class OrderService {
                 order.getUpdatedAt()
         );
     }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> getOrders(
+            String email,
+            Long customerId,
+            OrderStatus status,
+            LocalDateTime fromDate,
+            LocalDateTime toDate,
+            BigDecimal minTotal,
+            BigDecimal maxTotal,
+            Pageable pageable) {
+
+        User currentUser = findCurrentUser(email);
+
+        RoleName role = currentUser.getRole().getName();
+
+        // Customers can retrieve only their own orders
+
+        if (role == RoleName.CUSTOMER) {
+
+            if (customerId != null
+                    && !customerId.equals(currentUser.getId())) {
+
+                throw new AccessDeniedException(
+                        "Cannot access another customer's orders");
+            }
+
+            customerId = currentUser.getId();
+        }
+
+        if (fromDate != null && toDate != null
+                && fromDate.isAfter(toDate)) {
+
+            throw new IllegalArgumentException(
+                    "Invalid date range");
+        }
+
+        if (minTotal != null && minTotal.signum() < 0
+                || maxTotal != null && maxTotal.signum() < 0) {
+
+            throw new IllegalArgumentException(
+                    "Order total cannot be negative");
+        }
+
+        if (minTotal != null && maxTotal != null
+                && minTotal.compareTo(maxTotal) > 0) {
+
+            throw new IllegalArgumentException(
+                    "Invalid total amount range");
+        }
+
+        Specification<Order> specification =
+                OrderSpecification.filterOrders(
+                        customerId,
+                        status,
+                        fromDate,
+                        toDate,
+                        minTotal,
+                        maxTotal
+                );
+
+        return PageResponse.from(
+                orderRepository.findAll(specification, pageable)
+                        .map(this::mapToResponse)
+        );
+    }
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderById(
+            Long id,
+            String email) {
+
+        User currentUser = findCurrentUser(email);
+
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Order not found with id: " + id));
+
+        validateOrderAccess(order, currentUser);
+
+        return mapToResponse(order);
+    }
+
+    @Transactional
+    public OrderResponse updateOrderStatus(
+            Long id,
+            OrderStatus newStatus,
+            String email) {
+
+        User currentUser = findCurrentUser(email);
+
+        RoleName role = currentUser.getRole().getName();
+
+        if (role != RoleName.ADMIN
+                && role != RoleName.STAFF) {
+
+            throw new AccessDeniedException(
+                    "Order status update is not permitted");
+        }
+
+        // Staff have limited status permissions
+
+        if (role == RoleName.STAFF
+                && newStatus != OrderStatus.CONFIRMED
+                && newStatus != OrderStatus.PROCESSING) {
+
+            throw new AccessDeniedException(
+                    "Staff cannot assign this order status");
+        }
+
+        Order order = findOrderForUpdate(id);
+
+        OrderStatus currentStatus = order.getStatus();
+
+        boolean validTransition = switch (currentStatus) {
+
+            case PENDING ->
+                    newStatus == OrderStatus.CONFIRMED;
+
+            case CONFIRMED ->
+                    newStatus == OrderStatus.PROCESSING;
+
+            case PROCESSING ->
+                    newStatus == OrderStatus.SHIPPED;
+
+            case SHIPPED ->
+                    newStatus == OrderStatus.DELIVERED;
+
+            case DELIVERED, CANCELLED -> false;
+        };
+
+        if (!validTransition) {
+
+            throw new InvalidOrderStatusException(
+                    "Cannot change order status from "
+                            + currentStatus
+                            + " to "
+                            + newStatus);
+        }
+
+        order.setStatus(newStatus);
+
+        orderRepository.flush();
+
+        return mapToResponse(order);
+    }
+    @Transactional
+    public OrderResponse cancelOrder(
+            Long id,
+            String email) {
+
+        User currentUser = findCurrentUser(email);
+
+        RoleName role = currentUser.getRole().getName();
+
+        if (role != RoleName.ADMIN
+                && role != RoleName.CUSTOMER) {
+
+            throw new AccessDeniedException(
+                    "Order cancellation is not permitted");
+        }
+
+        // Lock the order
+
+        Order order = findOrderForUpdate(id);
+
+        // Validate ownership
+
+        validateOrderAccess(order, currentUser);
+
+        // Validate cancellation eligibility
+
+        if (order.getStatus() != OrderStatus.PENDING
+                && order.getStatus() != OrderStatus.CONFIRMED) {
+
+            throw new InvalidOrderStatusException(
+                    "Cannot cancel order with status: "
+                            + order.getStatus());
+        }
+
+        // Sort product IDs to maintain consistent locking order
+
+        List<OrderItem> sortedItems = order.getItems()
+                .stream()
+                .sorted(Comparator.comparing(
+                        item -> item.getProduct().getId()))
+                .toList();
+
+        // Restore stock
+
+        for (OrderItem item : sortedItems) {
+
+            Product product = productRepository
+                    .findByIdForUpdate(
+                            item.getProduct().getId())
+                    .orElseThrow(() ->
+                            new ResourceNotFoundException(
+                                    "Product not found"));
+
+            long restoredQuantity =
+                    (long) product.getStockQuantity()
+                            + item.getQuantity();
+
+            if (restoredQuantity > Integer.MAX_VALUE) {
+
+                throw new InvalidOrderStatusException(
+                        "Stock restoration exceeds supported limit");
+            }
+
+            product.setStockQuantity(
+                    (int) restoredQuantity);
+        }
+
+        // Mark order as cancelled
+
+        order.setStatus(OrderStatus.CANCELLED);
+
+        orderRepository.flush();
+
+        return mapToResponse(order);
+    }
+
+    private User findCurrentUser(String email) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "User not found"));
+
+        if (!user.isEnabled()) {
+
+            throw new AccessDeniedException(
+                    "Account is disabled");
+        }
+
+        return user;
+    }
+
+    private Order findOrderForUpdate(Long id) {
+
+        return orderRepository.findByIdForUpdate(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Order not found with id: " + id));
+    }
+
+    private void validateOrderAccess(
+            Order order,
+            User currentUser) {
+
+        if (currentUser.getRole().getName()
+                == RoleName.CUSTOMER
+                && !order.getCustomer().getId()
+                .equals(currentUser.getId())) {
+
+            throw new AccessDeniedException(
+                    "You cannot access this order");
+        }
+    }
+
+
+
 }
