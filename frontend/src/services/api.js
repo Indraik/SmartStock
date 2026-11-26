@@ -2,7 +2,14 @@ import axios from 'axios';
 import { TOKEN_STORAGE_KEY } from '../utils/constants';
 
 const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://localhost:8080/api' : '');
+
+if (!apiBaseUrl && import.meta.env.PROD) {
+  console.error(
+    'VITE_API_BASE_URL is not configured. Set VITE_API_BASE_URL in your deployment environment.'
+  );
+}
 
 const api = axios.create({
   baseURL: apiBaseUrl,
