@@ -81,6 +81,21 @@ public class SecurityConfig {
                                 "/api/orders/**"
                         ).authenticated()
 
+                        .requestMatchers(
+                                "/api/dashboard",
+                                "/api/dashboard/**"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/users/me"
+                        ).authenticated()
+
+                        .requestMatchers(
+                                "/api/users",
+                                "/api/users/**"
+                        ).hasRole("ADMIN")
+
                         .anyRequest().denyAll()
                 )
 

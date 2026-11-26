@@ -15,6 +15,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 public interface OrderRepository
@@ -44,5 +45,14 @@ public interface OrderRepository
     Page<Order> findAll(
             Specification<Order> specification,
             Pageable pageable
+    );
+
+    @Query("""
+        SELECT SUM(o.totalAmount)
+        FROM Order o
+        WHERE o.status <> :status
+        """)
+    BigDecimal sumTotalAmountExcludingStatus(
+            @Param("status") OrderStatus status
     );
 }

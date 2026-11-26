@@ -16,6 +16,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ProductRepository
@@ -51,4 +52,23 @@ public interface ProductRepository
         AND p.stockQuantity <= p.lowStockThreshold
         """)
     Page<Product> findLowStockProducts(Pageable pageable);
+
+    long countByActiveTrue();
+
+    @Query("""
+        SELECT COUNT(p)
+        FROM Product p
+        WHERE p.active = true
+        AND p.stockQuantity <= p.lowStockThreshold
+        """)
+    long countLowStockProducts();
+
+    @Query("""
+        SELECT p.category.name, COUNT(p)
+        FROM Product p
+        WHERE p.active = true
+        GROUP BY p.category.name
+        ORDER BY p.category.name
+        """)
+    List<Object[]> countProductsByCategory();
 }
